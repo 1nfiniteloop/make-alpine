@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# module-local
+declare _CHROOT_DIR
+declare -a _EXTRA_MOUNTS
+
+_error()
+{
+  local msg="${@}"
+  >&2 echo -e "Error in ${FUNCNAME[1]}: ${msg}"
+  false
+}
+
+rootfs_configure__init()
+{
+  readonly _CHROOT_DIR=${1}
+  shift
+  readonly _EXTRA_MOUNTS=(${@})
+}
+
+rootfs_configure__prepare()
+{
+  install -D -m 644 /etc/resolv.conf ${_CHROOT_DIR}/etc/resolv.conf \
+    && mount -t proc none ${_CHROOT_DIR}/proc \
+    && _mount_bind /sys ${_CHROOT_DIR}/sys \
+    && _mount_bind /dev ${_CHROOT_DIR}/dev \
+    && _mount_extras
+}
+
+_mount_extras()
+{
+  for mount_path in ${_EXTRA_MOUNTS}; do
+    _mount_bind_ro ${mount_path} ${_CHROOT_DIR}/${mount_path}
+  done
+}
+
+_mount_bind()
+{
+  mkdir -p ${2} \
+	  && mount --bind ${1} ${2} \
+	  && mount --make-private ${2}
+}
+
+_mount_bind_ro()
+{
+  mkdir -p ${2} \
+	  && mount --bind -o ro ${1} ${2} \
+	  && mount --make-private ${2}
+}
+
+rootfs_configure__run_scripts()
+{
+  local cfg_scripts="${@}"
+  chroot ${_CHROOT_DIR} /bin/sh -c 'for script in ${@}; do echo "Running configuration script: ${script}"; ${script}; done' -- "${cfg_scripts}"
+}
+
+rootfs_configure__cleanup()
+{
+  rm ${_CHROOT_DIR}/etc/resolv.conf \
+    && umount ${_CHROOT_DIR}/{proc,sys,dev} \
+    && _unmount_extras
+}
+
+_unmount_extras()
+{
+  for mount_path in ${_EXTRA_MOUNTS}; do
+    umount ${_CHROOT_DIR}/${mount_path}
+  done
+}
+
+rootfs_configure__main()
+{
+  local positional=()
+  local mounts=()
+  local directory
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+      -d|--directory)
+        readonly directory="${2}"
+        shift
+        shift
+      ;;
+      -m|--mount)
+        mounts+=("${2}")
+        shift
+        shift
+      ;;
+      *)
+        positional+=("${1}")
+        shift
+      ;;
+    esac
+  done
+
+  if [[ -z "${directory}" ]] || [[ ${#positional[@]} -lt 1 ]]; then
+    _error "\n\n\tUsage: ${0} -d|--directory <chroot-dir> [-m|--mount <extra-mount>] <config-script> [<config-script>, ...]\n"
+  elif [[ ! -e "${directory}" ]]; then
+    _error "chroot path: ${directory} does not exist"
+  elif [[ $(id -u) -ne 0 ]]; then
+    _error "must run this as root"
+  else
+    rootfs_configure__init ${directory} ${mounts[@]} \
+      && rootfs_configure__prepare \
+      && rootfs_configure__run_scripts "${positional[@]}"
+    rootfs_configure__cleanup
+  fi
+}
+
+rootfs_configure__main "${@}"

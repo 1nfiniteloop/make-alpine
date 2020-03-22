@@ -1,0 +1,18 @@
+#!/bin/sh
+
+readonly prefix_path=$(dirname ${0})
+readonly conf_name=$(basename ${0})
+
+source ${prefix_path}/librootfs.sh
+
+
+rootfs__add_packages \
+  chrony \
+  openssh-server \
+
+rootfs__enable_services_on default \
+  chronyd \
+  sshd
+
+
+rootfs__add_overlay_from ${conf_name}

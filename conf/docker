@@ -1,0 +1,16 @@
+#!/bin/sh
+
+readonly prefix_path=$(dirname ${0})
+readonly conf_name=$(basename ${0})
+
+source ${prefix_path}/librootfs.sh
+
+
+rootfs__add_packages \
+  docker \
+  docker-compose
+
+rootfs__enable_services_on default \
+  docker
+
+adduser alpine docker

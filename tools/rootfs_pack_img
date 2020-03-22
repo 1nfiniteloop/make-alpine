@@ -1,0 +1,224 @@
+#!/bin/bash
+
+readonly IMAGE_SUFFIX="img"
+readonly PARTITION_SUFFIX="part"
+readonly DIRECTORY_SUFFIX="d"
+
+# module-global
+declare _PREFIX_NAME
+declare _WORKDIR
+declare -a _PARTITION_SIZES
+
+
+_error()
+{
+  local msg="${@}"
+  >&2 echo "Error in ${FUNCNAME[1]}: ${msg}"
+  false
+}
+
+_info()
+{
+  local msg=${1}
+  echo "* ${msg}"
+}
+
+_join_rel_paths()
+{
+  local paths=(${@})
+  local joined_path
+  printf -v joined_path '/%s' "${paths[@]%/}"
+  echo ${joined_path#/}
+}
+
+
+rootfs_pack_img__init()
+{
+  readonly _PREFIX_NAME="${1}"
+  readonly _WORKDIR="${2}"
+  shift
+  shift
+  readonly _PARTITION_SIZES=(${@})
+}
+
+rootfs_pack_img__create_partition_init_offset()
+{
+  # "The default start offset for the first partition is 1 MiB", see "man sfdisk"
+  local default_offset_mib=1
+  _allocate_partition ${_WORKDIR} "${_PREFIX_NAME}.0.mbr+offset" ${default_offset_mib}
+}
+
+rootfs_pack_img__create_partitions()
+{
+  local directories=($(_find_content_directories ${_PREFIX_NAME} ${_WORKDIR}))
+  if [[ ${#_PARTITION_SIZES[@]} -eq ${#directories[@]} ]]; then
+    for directory in ${directories[@]}; do
+      local directory_name=${directory##*/}
+      local part_no=$(_get_partno_from ${directory_name})
+      local size_in_mib=${_PARTITION_SIZES[((${part_no}-1))]}
+      _info "Allocating ${size_in_mib}MiB for partition: ${directory_name}"
+      _allocate_partition ${_WORKDIR} ${directory_name} ${size_in_mib}
+      _create_fs_on_partition ${_WORKDIR} ${directory_name}
+    done
+  else
+    _error "No of size-args: ${#_PARTITION_SIZES[@]} doesn't match" \
+           "partitions found: ${#directories[@]}, in ${_WORKDIR} with prefix ${_PREFIX_NAME}"
+  fi
+}
+
+_find_content_directories()
+{
+  local prefix_name=${1}
+  local workdir=${2}
+  echo "$(find ${workdir} -type d -name "${prefix_name}.*.${DIRECTORY_SUFFIX}" |sort)"
+}
+
+_allocate_partition()
+{
+  local working_dir=${1}
+  local base_name=${2}
+  local size=${3}
+  local part_name=$(_get_partition_name_from ${base_name})
+  local abs_part_name="$(_join_rel_paths ${working_dir} ${part_name})"
+  if [[ ! -e ${abs_part_name} ]]; then
+    truncate -s "${size}M" ${abs_part_name}
+  else
+    _error "file ${abs_part_name} already exists!"
+  fi
+}
+
+_get_partition_name_from()
+{
+  local base_name=${1}
+  local prefix_name=$(_get_prefix_name_from ${base_name})
+  local part_no=$(_get_partno_from ${base_name})
+  local fs_type=$(_get_fstype_from ${base_name})
+  echo "${prefix_name}.${part_no}.${fs_type}.${PARTITION_SUFFIX}"
+}
+
+_get_prefix_name_from()
+{
+  local base_name=${1}
+  echo "$(cut -d '.' -f 1 <<< ${base_name})"
+}
+
+_get_partno_from()
+{
+  local base_name=${1}
+  echo "$(cut -d '.' -f 2 <<< ${base_name})"
+}
+
+_get_fstype_from()
+{
+  local base_name=${1}
+  echo "$(cut -d '.' -f 3 <<< ${base_name})"
+}
+
+_create_fs_on_partition()
+{
+  local working_dir=${1}
+  local base_name=${2}
+  local partition_name=$(_get_partition_name_from ${base_name})
+  local fs_type=$(_get_fstype_from ${base_name})
+  local src_folder="$(_join_rel_paths ${working_dir} ${base_name})"
+  local abs_partition_name="$(_join_rel_paths ${working_dir} ${partition_name})"
+  if [[ ! -e ${src_folder} ]]; then
+    _error "${src_folder} don't exist"
+  elif [[ ! -e ${abs_partition_name} ]]; then
+    _error "${abs_partition_name} don't exist"
+  else
+    case ${fs_type} in
+      vfat)
+        mkfs.vfat ${abs_partition_name} > /dev/null
+        mcopy -s -i ${abs_partition_name} ${src_folder}/* ::/
+      ;;
+      ext4)
+        mkfs.ext4 -q -d ${src_folder} ${abs_partition_name}
+      ;;
+      mbr+offset) ;;
+      *) _error "Unknown fs-type: ${fs_type}" ;;
+    esac
+  fi
+}
+
+rootfs_pack_img__create_image()
+{
+  local abs_dst_prefix="$(_join_rel_paths ${_WORKDIR} ${_PREFIX_NAME})"
+  local image_name="${abs_dst_prefix}.${IMAGE_SUFFIX}"
+  _info "Creating image: ${image_name}"
+  cat > ${image_name} \
+      $(echo ${abs_dst_prefix}.*.${PARTITION_SUFFIX} |sort) \
+    && rm ${abs_dst_prefix}.*.${PARTITION_SUFFIX}
+}
+
+rootfs_pack_img__create_partition_table()
+{
+  local boot_partition=1
+  local image_name_abs_path="$(_join_rel_paths ${_WORKDIR} ${_PREFIX_NAME}.${IMAGE_SUFFIX})"
+  _join_args_with_newline "$(_parse_sfdisk_partition_args)" \
+    |sfdisk --quiet ${image_name_abs_path} \
+    && sfdisk --quiet --activate ${image_name_abs_path} ${boot_partition}
+}
+
+_join_args_with_newline()
+{
+  local IFS=$'\n'
+  echo -e "$*"
+}
+
+_parse_sfdisk_partition_args()
+{
+  local directories=($(_find_content_directories ${_PREFIX_NAME} ${_WORKDIR}))
+  for directory in ${directories[@]}; do
+    local directory_name=${directory##*/}
+    local part_no=$(_get_partno_from ${directory_name})
+    local fs_type=$(_get_fstype_from ${directory_name})
+    local size_in_mib=${_PARTITION_SIZES[((${part_no}-1))]}
+    echo "$(_to_sfdisk_args ${size_in_mib} ${fs_type})"
+  done
+}
+
+_to_sfdisk_args()
+{
+  local size_mib="${1}"
+  local type="${2}"
+  local mega="$((2**20))"
+  local block_size=512
+  local blocks=$((${size_mib}*${mega}/${block_size}))
+  case ${type} in
+    vfat) echo "type=c, size=${blocks}";;
+    ext4) echo "type=83, size=${blocks}";;
+  esac
+}
+
+rootfs_pack_img__check_dependencies()
+{
+  if [[ ! $(which sfdisk) ]]; then
+    _error "sfdisk is missing"
+  elif [[ ! $(which mkfs.ext4) ]]; then
+    _error "mkfs.ext4 is missing"
+  elif [[ ! $(which mkfs.vfat) ]]; then
+    _error "mkfs.vfat is missing"
+  elif [[ ! $(which mcopy) ]]; then
+    _error "mcopy is missing"
+  else
+    :
+  fi
+}
+
+
+rootfs_pack_img__main()
+{
+  if [[ $# -lt 3 ]]; then
+    _error "Usage: ${0} <prefix-name> <prefix-dir> <size-in-MiB-part1-boot> <size-in-MiB-part2> ..."
+  else
+    rootfs_pack_img__init ${@} \
+      && rootfs_pack_img__check_dependencies \
+      && rootfs_pack_img__create_partitions \
+      && rootfs_pack_img__create_partition_init_offset \
+      && rootfs_pack_img__create_image \
+      && rootfs_pack_img__create_partition_table
+  fi
+}
+
+rootfs_pack_img__main "${@}"

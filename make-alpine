@@ -1,0 +1,113 @@
+#!/bin/bash
+
+readonly TOOLS_DIR=/usr/local/lib/make-alpine/tools
+readonly CONFIG_DIR=/usr/local/lib/make-alpine/conf
+
+readonly BOOT_DIR_SUFFIX="1.vfat.d"
+readonly ROOTFS_DIR_SUFFIX="2.ext4.d"
+readonly BOOTPART_SIZE_MIB=50
+readonly ROOTFS_ADDITIONAL_SPACE_MIB=20
+
+
+make_alpine__rootfs_init()
+{
+  local rootfs_dir=${1}
+  if [[ ! -e  ${rootfs_dir} ]]; then
+    ${TOOLS_DIR}/rootfs_init ${rootfs_dir}
+  fi
+}
+
+make_alpine__rootfs_configure()
+{
+  local boot_dir=${1}
+  local rootfs_dir=${2}
+  shift; shift
+  local conf_scripts=${@}
+  _rootfs_configure_pre ${boot_dir} ${rootfs_dir} \
+    && ${TOOLS_DIR}/rootfs_configure \
+        --directory ${rootfs_dir} \
+        --mount ${CONFIG_DIR} \
+        ${conf_scripts} \
+    && _rootfs_configure_post ${boot_dir} ${rootfs_dir}
+}
+
+_rootfs_configure_pre()
+{
+  local boot_dir=${1}
+  local rootfs_dir=${2}
+  if [[ ! -e ${boot_dir} ]]; then
+    mkdir ${boot_dir}
+  fi
+  mv ${boot_dir} ${rootfs_dir}/boot
+}
+
+_rootfs_configure_post()
+{
+  local boot_dir=${1}
+  local rootfs_dir=${2}
+  mv ${rootfs_dir}/boot ${boot_dir}
+}
+
+make_alpine__rootfs_pack()
+{
+  local prefix_name=${1}
+  local workdir=${2}
+  local rootfs_size_mib=$(_get_partiton_size ${workdir}/${prefix_name}.${ROOTFS_DIR_SUFFIX})
+  ${TOOLS_DIR}/rootfs_pack_img ${prefix_name} ${workdir} \
+    ${BOOTPART_SIZE_MIB} \
+    ${rootfs_size_mib}
+}
+
+_get_partiton_size()
+{
+  local part=${1}
+  local size=$(du -hs ${part} |cut -f 1)
+  local size_int=${size%.*M}
+  echo "$((${size_int}+${ROOTFS_ADDITIONAL_SPACE_MIB}))"
+}
+
+make_alpine__main()
+{
+  local positional=()
+  local name="alpine-linux"
+  local declare workdir
+  while [[ $# -gt 0 ]]; do
+    key="$1"
+    case $key in
+      -n|--name)
+        name="${2}"
+        shift
+        shift
+      ;;
+      -d|--workdir)
+        workdir="${2}"
+        shift
+        shift
+      ;;
+      *)
+        positional+=("${1}")
+        shift
+      ;;
+    esac
+  done
+
+  if [[ -z "${workdir}" ]]; then
+    workdir="$(mktemp -p /tmp -d make-alpine.XXXXXX)"
+  fi
+  
+  if [[ ${#positional[@]} -lt 1 ]]; then
+    echo -e "\n\tUsage: ${0} [--name <prefix-name>] [--workdir <workdir>] <config-scripts> [<config-script>, ...]\n"
+  else
+    local prefix_name="${name}-$(uname -m)"
+    local workdir="${workdir%/}"
+    shift; shift
+    local cfg_scripts="${positional[@]}"
+    local readonly boot_dir=${workdir}/${prefix_name}.${BOOT_DIR_SUFFIX}
+    local readonly rootfs_dir=${workdir}/${prefix_name}.${ROOTFS_DIR_SUFFIX}
+    make_alpine__rootfs_init ${rootfs_dir} \
+      && make_alpine__rootfs_configure ${boot_dir} ${rootfs_dir} ${cfg_scripts} \
+      && make_alpine__rootfs_pack ${prefix_name} ${workdir}
+  fi
+}
+
+make_alpine__main "${@}"

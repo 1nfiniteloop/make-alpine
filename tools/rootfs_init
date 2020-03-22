@@ -1,0 +1,57 @@
+#!/bin/bash
+
+
+readonly BASIC_PACKAGES="alpine-base"
+readonly REPOSITORIES_FILE=/etc/apk/repositories
+readonly KEYS_DIR=/etc/apk/keys
+
+
+_error()
+{
+  local msg="${@}"
+  >&2 echo -e "Error in ${FUNCNAME[1]}: ${msg}"
+  false
+}
+
+rootfs_init__add_basic_packages()
+{
+  local chroot_dir="${1}"
+  if [[ -e "${chroot_dir}" ]]; then
+    echo "Initializing rootfs with package: ${BASIC_PACKAGES}..."
+    apk add \
+      --quiet \
+      --repositories-file "${REPOSITORIES_FILE}" \
+      --keys-dir "${KEYS_DIR}" \
+      --no-cache \
+      --root "${chroot_dir}" \
+      --initdb \
+      ${BASIC_PACKAGES}
+  else
+    _error "chroot dir: ${chroot_dir} does not exist"
+  fi
+}
+
+rootfs_init__add_basic_configuration()
+{
+  local chroot_dir="${1}"
+  cp ${REPOSITORIES_FILE} ${chroot_dir}/etc/apk
+}
+
+
+rootfs_init__main()
+{
+  local chroot_dir="${1}"
+  if [[ $# -ne 1 ]]; then
+    _error "\n\n\tUsage: ${0} <chroot-dir>\n"
+  elif [[ $(id -u) -ne 0 ]]; then
+    _error "must run this as root"
+  elif [[ -e "${chroot_dir}" ]]; then
+    _error "chroot dir: ${chroot_dir} already exist"
+  else
+    mkdir -p ${chroot_dir} \
+      && rootfs_init__add_basic_packages ${chroot_dir} \
+      && rootfs_init__add_basic_configuration ${chroot_dir}
+  fi
+}
+
+rootfs_init__main "${@}"

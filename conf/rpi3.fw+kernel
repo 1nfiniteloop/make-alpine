@@ -1,0 +1,23 @@
+#!/bin/sh
+
+readonly prefix_path=$(dirname ${0})
+readonly conf_name=$(basename ${0})
+
+source ${prefix_path}/librootfs.sh
+
+readonly boot=/boot
+readonly symlink_boot=/boot/boot
+readonly symlink_dtb=/boot/dtbs-rpi2
+
+# NOTE: the symlinks might result in breaking upgrades!
+ln -s ${boot} ${symlink_boot} \
+  && ln -s ${boot} ${symlink_dtb} \
+  && rootfs__add_packages \
+    linux-rpi2 \
+    linux-firmware-brcm \
+    raspberrypi-bootloader \
+  && rm ${symlink_dtb} \
+  && rm ${symlink_boot}
+
+
+rootfs__add_overlay_from ${conf_name}

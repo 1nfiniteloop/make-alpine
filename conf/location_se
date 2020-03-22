@@ -1,0 +1,9 @@
+#!/bin/sh
+
+readonly prefix_path=$(dirname ${0})
+readonly conf_name=$(basename ${0})
+
+source ${prefix_path}/librootfs.sh
+
+setup-keymap se se
+setup-timezone -z Europe/Stockholm

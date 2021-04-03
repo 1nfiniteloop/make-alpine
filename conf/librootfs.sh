@@ -53,7 +53,7 @@ rootfs__add_overlay_from()
 {
   local conf_path="${overlays_dir}/${1}.d"
   if [ -e ${conf_path} ]; then
-    cp -r ${conf_path}/* /
+    cp -r ${conf_path}/. /
   else
     _error "no configuration exist: ${conf_path}"
   fi

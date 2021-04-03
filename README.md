@@ -39,7 +39,7 @@ architecture arm32v7:
 This tool-set contains several configurations which is combined to build a
 customized alpine-linux distro. Each configuration is a script which runs inside
 a chrooted file system. Each configuration has optionally a set of static files
-(overlays), see `conf/`.
+(overlays), see `config/`.
 
 The main script `make-alpine` creates a raw image with a separate
 boot-partition. The image is ready to be directly coped onto the SD-card. Below
@@ -59,7 +59,7 @@ docker run \
   make-alpine \
     --name alpine-rpi3 \
     --workdir /home/build/cache \
-    /usr/local/lib/make-alpine/conf/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
+    /usr/local/lib/make-alpine/config/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
 ```
 
 ### Copy image onto media

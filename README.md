@@ -59,7 +59,7 @@ docker run \
   make-alpine \
     --name alpine-rpi3 \
     --workdir /home/build/cache \
-    /usr/local/lib/make-alpine/conf/{base_sys,rpi3.fw+kernel,net+ssh,location_se,docker}
+    /usr/local/lib/make-alpine/conf/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
 ```
 
 ### Copy image onto media

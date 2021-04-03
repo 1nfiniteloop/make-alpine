@@ -1,0 +1,20 @@
+#!/bin/sh
+
+readonly prefix_path=$(dirname ${0})
+readonly conf_name=$(basename ${0})
+
+source ${prefix_path}/librootfs.sh
+
+rootfs__add_packages \
+  sudo
+
+adduser \
+    -D \
+    -s /bin/ash \
+    alpine \
+  && echo "alpine:alpine" \
+     |chpasswd \
+  && addgroup sudo \
+  && adduser alpine sudo \
+  && echo -e "\n# Allow sudo without password\n%sudo ALL=(ALL) NOPASSWD:ALL\n" >> /etc/sudoers
+

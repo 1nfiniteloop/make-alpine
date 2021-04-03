@@ -16,7 +16,6 @@ rootfs__add_packages \
   network-extras \
   openssl \
   openssh \
-  sudo \
   tzdata
 
 rootfs__enable_services_on sysinit \
@@ -40,11 +39,3 @@ rootfs__enable_services_on shutdown \
 
 rootfs__add_overlay_from ${conf_name}
 
-adduser \
-    -D \
-    alpine \
-  && echo "alpine:alpine" \
-     |chpasswd \
-  && addgroup sudo \
-  && adduser alpine sudo \
-  && echo -e "\n# Allow sudo without password\n%sudo ALL=(ALL) NOPASSWD:ALL\n" >> /etc/sudoers

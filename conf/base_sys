@@ -10,12 +10,10 @@ rootfs__add_packages \
   apk-tools \
   alpine-mirrors \
   kbd-bkeymaps \
-  chrony \
   e2fsprogs \
   haveged \
   network-extras \
   openssl \
-  openssh \
   tzdata
 
 rootfs__enable_services_on sysinit \

@@ -8,7 +8,11 @@ source ${prefix_path}/librootfs.sh
 
 rootfs__add_packages \
   chrony \
-  openssh-server \
+  openssh \
+  vlan
+
+rootfs__enable_services_on boot \
+  networking
 
 rootfs__enable_services_on default \
   chronyd \

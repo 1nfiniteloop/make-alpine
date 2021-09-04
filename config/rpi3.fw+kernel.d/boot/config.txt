@@ -1,6 +1,5 @@
 # do not modify this file as it will be overwritten on upgrade.
 # create and/or modify usercfg.txt instead.
-# https://www.raspberrypi.org/documentation/configuration/config-txt
 [pi0]
 kernel=vmlinuz-rpi
 initramfs initramfs-rpi
@@ -21,8 +20,3 @@ kernel=vmlinuz-rpi2
 initramfs initramfs-rpi2
 [all]
 include usercfg.txt
-
-# TODO sync with:
-# https://github.com/knoopx/alpine-raspberry-pi/blob/master/bootstrap/kernel.sh
-# and
-# https://github.com/hoshsadiq/alpine-raspberry-pi/tree/master/build/assets/kernel

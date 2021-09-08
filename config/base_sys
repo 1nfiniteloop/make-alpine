@@ -11,9 +11,11 @@ rootfs__add_packages \
   alpine-mirrors \
   kbd-bkeymaps \
   e2fsprogs \
+  e2fsprogs-extra \
   haveged \
   network-extras \
   openssl \
+  parted \
   tzdata
 
 rootfs__enable_services_on sysinit \

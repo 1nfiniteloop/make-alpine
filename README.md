@@ -24,7 +24,8 @@ however been a great reference.
 
 Activate binfmt_misc and qemu-static emulation for running containers with
 foreign architectures:
-`docker run --rm --privileged docker/binfmt:820fdd95a9972a5308930a2bdfb8573dd4447ad3`.
+
+    docker run --rm --privileged docker/binfmt:820fdd95a9972a5308930a2bdfb8573dd4447ad3
 
 **Note:** This is not persistent during reboots.
 
@@ -32,7 +33,8 @@ foreign architectures:
 
 Create the build environment for alpine-linux, in this example for target
 architecture arm32v7:
-`docker build --build-arg TARGET_ARCH=arm32v7 --tag make-alpine:arm32v7 .`.
+
+    docker buildx build --build-arg ARCH=arm/v7 --tag make-alpine:arm32v7 .
 
 ### Build your alpine-linux
 
@@ -47,20 +49,17 @@ is an example of a build with networking, ssh-access and docker.
 
 Build alpine-linux:
 
-```bash
-docker run \
-  --name make-alpine \
-  --rm \
-  -it \
-  --privileged \
-  -u root \
-  -v make-alpine:/home/build/cache \
-  make-alpine:arm32v7 \
-  make-alpine \
-    --name alpine-rpi3 \
-    --workdir /home/build/cache \
-    /usr/local/lib/make-alpine/config/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
-```
+    docker run \
+      --name make-alpine \
+      -it \
+      --privileged \
+      -u root \
+      -v make-alpine:/home/build/out \
+      make-alpine:arm32v7 \
+      make-alpine \
+        --name alpine-rpi3 \
+        --workdir /home/build/out \
+        /usr/local/lib/make-alpine/config/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
 
 ### Copy image onto media
 
@@ -71,10 +70,13 @@ docker run \
 
 ### Finally
 
-* Resize the root partition and file system, dependent on your needs.
+* Resize the root partition and file system with `parted`, dependent on your
+  needs.
 * Set a root-password from user alpine with `sudo su` and `passwd`.
 * Set a broadcast hostname in dhcp requests by configuring
   `/etc/network/interfaces`.
+* Optional: Mount tmpfs over root filesystem to write-protect by adding
+  `overlaytmpfs=yes` into `cmdline.txt`.
 
 ## References
 

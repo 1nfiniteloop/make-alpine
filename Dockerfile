@@ -1,5 +1,5 @@
-ARG TARGET_ARCH=amd64
-FROM ${TARGET_ARCH}/alpine:3.14
+ARG ARCH=amd64
+FROM --platform="linux/${ARCH}" alpine:3.14
 
 RUN sed -i 's|dl-cdn.alpinelinux.org/alpine|ftp.acc.umu.se/mirror/alpinelinux.org|g' /etc/apk/repositories
 

@@ -59,7 +59,7 @@ Build alpine-linux:
       make-alpine \
         --name alpine-rpi3 \
         --workdir /home/build/out \
-        /usr/local/lib/make-alpine/config/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
+        /usr/local/lib/make_alpine/config/{base_sys,rpi3.fw+kernel,alpine_user,net+ssh,location_se,docker}
 
 ### Copy image onto media
 

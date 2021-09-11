@@ -21,9 +21,7 @@ RUN adduser \
     && adduser build sudo \
     && echo -e "\n# Allow sudo without password\n%sudo ALL=(ALL) NOPASSWD:ALL\n" >> /etc/sudoers
 
-ADD make-alpine /usr/local/bin
-ADD config /usr/local/lib/make-alpine/config
-ADD tools /usr/local/lib/make-alpine/tools
+ADD overlay /
 
 USER build
 ENV USER=build

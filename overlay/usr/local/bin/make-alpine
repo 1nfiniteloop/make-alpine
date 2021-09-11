@@ -1,7 +1,7 @@
 #!/bin/bash
 
-readonly TOOLS_DIR=/usr/local/lib/make-alpine/tools
-readonly CONFIG_DIR=/usr/local/lib/make-alpine/config
+readonly TOOLS_DIR=/usr/local/lib/make_alpine/tools
+readonly CONFIG_DIR=/usr/local/lib/make_alpine/config
 
 # constants
 readonly BOOT_DIR_SUFFIX="1.vfat.d"

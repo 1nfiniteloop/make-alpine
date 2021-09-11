@@ -3,13 +3,60 @@
 readonly TOOLS_DIR=/usr/local/lib/make-alpine/tools
 readonly CONFIG_DIR=/usr/local/lib/make-alpine/config
 
+# constants
 readonly BOOT_DIR_SUFFIX="1.vfat.d"
 readonly ROOTFS_DIR_SUFFIX="2.ext4.d"
 readonly BOOTPART_SIZE_MIB=50
-readonly ROOTFS_ADDITIONAL_SPACE_MIB=20
 
+# cmdline options
+OPT_POSITIONAL=()
+OPT_NAME="alpinelinux-$(uname -m)"
+OPT_WORKDIR="."
+OPT_NO_IMAGE=""
+OPT_ROOTFS_EXTRA_MIB=50
 
-make_alpine__rootfs_init()
+__parse_cmdline_args()
+{
+  while [[ ${#} -gt 0 ]]; do
+    key="${1}"
+    case $key in
+      -h|--help)
+        __help_and_exit
+      ;;
+      -n|--name)
+        OPT_NAME="${2}-$(uname -m)"
+        shift
+        shift
+      ;;
+      -d|--workdir)
+        OPT_WORKDIR="${2%/}" # remove trailing slash
+        shift
+        shift
+      ;;
+      --no-image)
+        OPT_NO_IMAGE="true"
+        shift
+      ;;
+      --rootfs-extra-mib)
+        OPT_ROOTFS_EXTRA_MIB="${2}"
+        shift
+        shift
+      ;;
+      *)
+        OPT_POSITIONAL+=("${1}")
+        shift
+      ;;
+    esac
+  done
+}
+
+__help_and_exit()
+{
+  >&2 echo -e "\n\tUsage: ${0} [-n|--name <prefix-name>] [-d|--workdir <workdir>] [--no-image] [--rootfs-extra-mib <size>] [<config-scripts> [<config-script>, ...]]\n"
+  exit 1
+}
+
+__rootfs_init_once()
 {
   local rootfs_dir=${1}
   if [[ ! -e  ${rootfs_dir} ]]; then
@@ -17,21 +64,7 @@ make_alpine__rootfs_init()
   fi
 }
 
-make_alpine__rootfs_configure()
-{
-  local boot_dir=${1}
-  local rootfs_dir=${2}
-  shift; shift
-  local conf_scripts=${@}
-  _rootfs_configure_pre ${boot_dir} ${rootfs_dir} \
-    && ${TOOLS_DIR}/rootfs_configure \
-        --directory ${rootfs_dir} \
-        --mount ${CONFIG_DIR} \
-        ${conf_scripts} \
-    && _rootfs_configure_post ${boot_dir} ${rootfs_dir}
-}
-
-_rootfs_configure_pre()
+__rootfs_configure_pre()
 {
   local boot_dir=${1}
   local rootfs_dir=${2}
@@ -41,73 +74,59 @@ _rootfs_configure_pre()
   mv ${boot_dir} ${rootfs_dir}/boot
 }
 
-_rootfs_configure_post()
+__rootfs_configure_post()
 {
   local boot_dir=${1}
   local rootfs_dir=${2}
   mv ${rootfs_dir}/boot ${boot_dir}
 }
 
-make_alpine__rootfs_pack()
+__rootfs_pack()
 {
   local prefix_name=${1}
   local workdir=${2}
-  local rootfs_size_mib=$(_get_partiton_size ${workdir}/${prefix_name}.${ROOTFS_DIR_SUFFIX})
+  local rootfs_size_mib=$(__get_partiton_size ${workdir}/${prefix_name}.${ROOTFS_DIR_SUFFIX})
   ${TOOLS_DIR}/rootfs_pack_img ${prefix_name} ${workdir} \
     ${BOOTPART_SIZE_MIB} \
     ${rootfs_size_mib}
 }
 
-_get_partiton_size()
+__get_partiton_size()
 {
   local part=${1}
   local size=$(du -hs ${part} |cut -f 1)
   local size_int=${size%.*M}
-  echo "$((${size_int}+${ROOTFS_ADDITIONAL_SPACE_MIB}))"
+  echo "$((${size_int}+${OPT_ROOTFS_EXTRA_MIB}))"
 }
 
-make_alpine__main()
+__run()
 {
-  local positional=()
-  local name="alpine-linux"
-  local declare workdir
-  while [[ $# -gt 0 ]]; do
-    key="$1"
-    case $key in
-      -n|--name)
-        name="${2}"
-        shift
-        shift
-      ;;
-      -d|--workdir)
-        workdir="${2}"
-        shift
-        shift
-      ;;
-      *)
-        positional+=("${1}")
-        shift
-      ;;
-    esac
-  done
-
-  if [[ -z "${workdir}" ]]; then
-    workdir="$(mktemp -p /tmp -d make-alpine.XXXXXX)"
+  local readonly boot_dir="${OPT_WORKDIR}/${OPT_NAME}.${BOOT_DIR_SUFFIX}"
+  local readonly rootfs_dir="${OPT_WORKDIR}/${OPT_NAME}.${ROOTFS_DIR_SUFFIX}"
+  __rootfs_init_once "${rootfs_dir}"
+  __rootfs_configure_pre \
+      "${boot_dir}" \
+      "${rootfs_dir}"
+  if [[ ${#OPT_POSITIONAL[@]} -gt 0 ]]; then
+    ${TOOLS_DIR}/rootfs_configure \
+      --directory "${rootfs_dir}" \
+      --mount "${CONFIG_DIR}" \
+      "${OPT_POSITIONAL[@]}"
   fi
-  
-  if [[ ${#positional[@]} -lt 1 ]]; then
-    echo -e "\n\tUsage: ${0} [--name <prefix-name>] [--workdir <workdir>] <config-scripts> [<config-script>, ...]\n"
-  else
-    local prefix_name="${name}-$(uname -m)"
-    local workdir="${workdir%/}"
-    shift; shift
-    local cfg_scripts="${positional[@]}"
-    local readonly boot_dir=${workdir}/${prefix_name}.${BOOT_DIR_SUFFIX}
-    local readonly rootfs_dir=${workdir}/${prefix_name}.${ROOTFS_DIR_SUFFIX}
-    make_alpine__rootfs_init ${rootfs_dir} \
-      && make_alpine__rootfs_configure ${boot_dir} ${rootfs_dir} ${cfg_scripts} \
-      && make_alpine__rootfs_pack ${prefix_name} ${workdir}
+    __rootfs_configure_post \
+      "${boot_dir}" \
+      "${rootfs_dir}"
+  if [[ -z "${OPT_NO_IMAGE}" ]]; then
+    __rootfs_pack \
+      "${OPT_NAME}" \
+      "${OPT_WORKDIR}"
   fi
 }
 
-make_alpine__main "${@}"
+main()
+{
+  __parse_cmdline_args "${@}"
+  __run "${@}"
+}
+
+main "${@}"
